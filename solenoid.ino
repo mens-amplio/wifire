@@ -72,7 +72,8 @@ void receiveData(int byteCount){
       case 0xC : bitFlip(r2,4); break;
       case 0xD : bitFlip(r2,5); break;
       case 0xE : bitFlip(r2,6); break;
-      case 0xF : bitFlip(r2,7); break;
+      // we aren't using the 16th solenoid, so repurposing it as an all-off signal
+      case 0xF : r1 = 0; r2 = 0; break; 
     }
   }
   digitalWrite(LATCHPIN, LOW);
