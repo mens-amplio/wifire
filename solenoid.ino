@@ -1,4 +1,7 @@
-// Modified version of Seth's WiFire demo code that uses I2C
+// Modified version of Seth's WiFire demo code that uses I2C.
+// Assumes that indices are being sent as a block of bytes with the
+// following format:
+// [address][command][index1][index2] ...
 
 #include <SPI.h>
 #include <Wire.h>
@@ -36,12 +39,7 @@ void setup() {
   digitalWrite(OEPIN, LOW);
 
   // clear any lines that were left active
-  digitalWrite(LATCHPIN, LOW);
-  digitalWrite(OEPIN, HIGH);
-  c = SPI.transfer(0);
-  c = SPI.transfer(0);
-  digitalWrite(LATCHPIN, HIGH);
-  digitalWrite(OEPIN, LOW);
+  sendSPI(0,0);  
   
   // activate built-in pull-up resistor 
   digitalWrite(ARMEDPIN, HIGH);
@@ -51,9 +49,20 @@ void loop() {
     delay(100);
 }
 
+void sendSPI(byte one, byte two) {
+  digitalWrite(LATCHPIN, LOW);
+  digitalWrite(OEPIN, HIGH);
+  c = SPI.transfer(two);
+  c = SPI.transfer(one);
+  digitalWrite(LATCHPIN, HIGH);
+  digitalWrite(OEPIN, LOW);
+}
+
 // callback for received data
 void receiveData(int byteCount){
   c = 0;
+  Wire.read(); // skip address byte
+  Wire.read(); // skip command byte
   while(Wire.available()) {
     c = Wire.read();
     switch(c) {
@@ -76,13 +85,7 @@ void receiveData(int byteCount){
       case 0xF : r1 = 0; r2 = 0; break; 
     }
   }
-  digitalWrite(LATCHPIN, LOW);
-  digitalWrite(OEPIN, HIGH);
-  SPI.transfer(r2);
-  SPI.transfer(r1);
-  digitalWrite(LATCHPIN, HIGH);
-  digitalWrite(OEPIN, LOW);
-  delay(50);
+  sendSPI(r1, r2);
 }
 
 // callback for sending data (for debugging only)
