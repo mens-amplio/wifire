@@ -2,6 +2,14 @@
 // Assumes that indices are being sent as a block of bytes with the
 // following format:
 // [address][command][index1][index2] ...
+//
+// Connection instructions:
+// Pin 27/A4/SDA to Raspberry Pi SDA
+// Pin 28/A5/SCL to Raspberry Pi SCL
+// Pin 9 to button in override box
+// Pin 2 to switch-up terminal in override box
+// Pin 3 to switch-down terminal in override box
+// Share ground with Raspberry Pi
 
 #include <SPI.h>
 #include <Wire.h>
@@ -14,6 +22,14 @@
 #define DATAPIN  11   // data for 74HC595 shift registers
 #define CLOCKPIN 13   // clock for 74HC595 shift registers
 
+// for override box
+#define BUTTONPIN 9    // the number of the pushbutton pin
+#define SWITCHDOWNPIN 3
+#define SWITCHUPPIN 2
+
+int buttonState = 0;
+int switchState = -1; // 0: off, 1: up, -1: down
+
 // for i2c
 #define SLAVE_ADDRESS 0x04 
 
@@ -21,6 +37,51 @@
 
 byte c;
 byte r1 = 0, r2 = 0;
+
+void doOverride()
+{
+  // all off if in middle position, or up position with button unpressed
+  if (switchState == 0 || (switchState == 1 && buttonState == 0))
+  {
+    sendSPI(0, 0);
+  }
+  // all on if in up position with button pressed
+  else if (switchState == 1 && buttonState == 1) 
+  {
+    sendSPI(0xFF, 0xFF);
+  }
+}
+
+void checkSwitchBox()
+{
+  int oldSwitchState = switchState;
+  int oldButtonState = buttonState;
+  
+  // read the button/switch state. When a switch/button is disconnected, it reads
+  // high due to the internal pull-ups; when connected, it's pulled to ground.
+  // We reverse the values to get a more intuitive 1=engaged, 0=disengaged result.
+  buttonState = !digitalRead(BUTTONPIN);
+  int down = !digitalRead(SWITCHDOWNPIN);
+  int up = !digitalRead(SWITCHUPPIN);
+  
+  if ( down == 1 && up == 0 )
+  {
+    switchState = -1;
+  }
+  else if ( down == 0 && up == 1 )
+  {
+    switchState = 1;
+  }
+  else
+  {
+    switchState = 0;
+  }
+  
+  if (switchState != oldSwitchState || buttonState != oldButtonState)
+  {
+    doOverride();
+  }
+}
 
 void setup() {
   // set up I2C
@@ -43,10 +104,21 @@ void setup() {
   
   // activate built-in pull-up resistor 
   digitalWrite(ARMEDPIN, HIGH);
+  
+    // initialize inputs for external override box
+  pinMode(BUTTONPIN, INPUT);   
+  pinMode(SWITCHDOWNPIN, INPUT);     
+  pinMode(SWITCHUPPIN, INPUT);
+  
+  // turn on pullup resistors for override box
+  digitalWrite(BUTTONPIN, HIGH);       
+  digitalWrite(SWITCHDOWNPIN, HIGH); 
+  digitalWrite(SWITCHUPPIN, HIGH);
 }
 
 void loop() {
-    delay(100);
+  checkSwitchBox();
+  delay(50);
 }
 
 void sendSPI(byte one, byte two) {
@@ -85,7 +157,10 @@ void receiveData(int byteCount){
       case 0xF : r1 = 0; r2 = 0; break; 
     }
   }
-  sendSPI(r1, r2);
+  if (switchState == -1)
+  {
+    sendSPI(r1, r2);
+  }
 }
 
 // callback for sending data (for debugging only)
